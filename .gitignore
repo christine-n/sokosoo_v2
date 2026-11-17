@@ -1,0 +1,12 @@
+node_modules/
+.next/
+.expo/
+.venv/
+__pycache__/
+*.pyc
+*.tsbuildinfo
+*.sqlite3
+.env
+.env.local
+dist/
+test-results/

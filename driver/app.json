@@ -1,0 +1,29 @@
+{
+  "expo": {
+    "name": "SokoSoo Driver",
+    "slug": "sokosoo-driver",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "light",
+    "ios": {
+      "bundleIdentifier": "com.sokosoo.driver",
+      "supportsTablet": false
+    },
+    "android": {
+      "package": "com.sokosoo.driver"
+    },
+    "plugins": [
+      [
+        "expo-location",
+        {
+          "locationAlwaysAndWhenInUsePermission": "SokoSoo uses your location during active deliveries so customers can track their produce.",
+          "isIosBackgroundLocationEnabled": true,
+          "isAndroidBackgroundLocationEnabled": true,
+          "isAndroidForegroundServiceEnabled": true
+        }
+      ],
+      "expo-secure-store",
+      "expo-status-bar"
+    ]
+  }
+}
