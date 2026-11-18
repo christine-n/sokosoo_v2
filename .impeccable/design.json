@@ -1,0 +1,76 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-11-18",
+  "title": "SokoSoo Design System",
+  "extensions": {
+    "shadows": [
+      { "name": "account-popover", "value": "0 10px 40px #1d2c1930", "purpose": "Temporary account navigation." },
+      { "name": "drawer", "value": "-10px 0 60px #25341d12", "purpose": "Separation of the native modal drawer." },
+      { "name": "toast", "value": "0 8px 30px #15210d26", "purpose": "Transient action feedback." }
+    ],
+    "motion": [
+      { "name": "interaction", "value": "150ms ease-out", "purpose": "Background and text-color changes." },
+      { "name": "active", "value": "translateY(1px)", "purpose": "Button activation; removed for reduced motion." }
+    ],
+    "breakpoints": [
+      { "name": "header-wrap", "value": "1250px" },
+      { "name": "intermediate", "value": "960px" },
+      { "name": "inbox-columns", "value": "720px" },
+      { "name": "mobile", "value": "700px" },
+      { "name": "compact-inbox", "value": "540px" }
+    ]
+  },
+  "components": [
+    {
+      "name": "Primary action",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "The primary task action, without implying a payment.",
+      "html": "<button class=\"ds-primary\">Send enquiry</button>",
+      "css": ".ds-primary{font:600 15px/1.4 var(--body);min-height:46px;padding:12px 18px;border:0;border-radius:var(--radius-control);background:var(--green);color:var(--canvas);cursor:pointer;transition:background-color 150ms ease-out}.ds-primary:hover{background:var(--green-dark)}.ds-primary:focus-visible{outline:2px solid var(--green);outline-offset:4px}.ds-primary:disabled{opacity:.55;cursor:not-allowed}"
+    },
+    {
+      "name": "Secondary action",
+      "kind": "button",
+      "refersTo": "button-secondary",
+      "description": "A supporting action with a visible boundary.",
+      "html": "<button class=\"ds-secondary\">Refresh enquiries</button>",
+      "css": ".ds-secondary{font:600 15px/1.4 var(--body);min-height:46px;padding:12px 18px;border:1px solid var(--control-border);border-radius:var(--radius-control);background:var(--canvas);color:var(--green-dark);cursor:pointer}.ds-secondary:hover{background:var(--green-pale)}.ds-secondary:focus-visible{outline:2px solid var(--green);outline-offset:4px}"
+    },
+    {
+      "name": "Labelled field",
+      "kind": "input",
+      "refersTo": "input",
+      "description": "Persistent label, identifiable boundary and associated validation.",
+      "html": "<label class=\"ds-field\"><span>Quantity (kg)</span><input type=\"number\" min=\"0.01\" step=\"0.01\" value=\"1\"></label>",
+      "css": ".ds-field{display:flex;flex-direction:column;gap:7px;font:400 16px/1.5 var(--body);color:var(--ink)}.ds-field span{font-size:14px;font-weight:600}.ds-field input{font:inherit;min-width:0;padding:11px 12px;border:1px solid var(--control-border);border-radius:var(--radius-control);background:var(--canvas);color:var(--ink)}.ds-field input:focus-visible{outline:2px solid var(--green);outline-offset:4px}.ds-field input[aria-invalid=true]{border-color:var(--error-text)}"
+    },
+    {
+      "name": "Shopping navigation",
+      "kind": "nav",
+      "description": "Horizontal storefront destinations, with an explicit current page.",
+      "html": "<nav class=\"ds-nav\" aria-label=\"Shopping\"><a href=\"#produce\" aria-current=\"page\">Shop produce</a><a href=\"#hubs\">Shop by hub</a></nav>",
+      "css": ".ds-nav{display:flex;flex-wrap:wrap;gap:23px;font:400 14px/1.5 var(--body)}.ds-nav a{display:inline-flex;align-items:center;min-height:50px;color:var(--muted);text-decoration:none;border-bottom:2px solid transparent}.ds-nav a[aria-current]{color:var(--green-dark);border-bottom-color:var(--green);font-weight:600}.ds-nav a:hover{color:var(--green-dark)}.ds-nav a:focus-visible{outline:2px solid var(--green);outline-offset:4px}"
+    },
+    {
+      "name": "Neutral status",
+      "kind": "chip",
+      "description": "A non-interactive textual state, never color-only information.",
+      "html": "<span class=\"ds-status\">Archived</span>",
+      "css": ".ds-status{display:inline-flex;width:fit-content;padding:5px 10px;border-radius:5px;font:400 13px/1.5 var(--body);background:var(--status-bg);color:var(--status-text)}"
+    },
+    {
+      "name": "Request record",
+      "kind": "card",
+      "description": "A flat bordered record using the shared card shape.",
+      "html": "<article class=\"ds-record\"><h2>Buyer request</h2><p>Quantity, budget and farmer offers stay together.</p></article>",
+      "css": ".ds-record{padding:25px;border:1px solid var(--line);border-radius:var(--radius-card);background:var(--canvas);color:var(--ink)}.ds-record h2{margin:0 0 8px;font:700 22px/1.35 var(--heading)}.ds-record p{margin:0;color:var(--muted);font:400 16px/1.5 var(--body)}"
+    }
+  ],
+  "narrative": {
+    "overview": "The existing product-led white storefront uses restrained green for action and selection. Operational surfaces favor familiar controls, clear consequences and explicit recovery.",
+    "keyCharacteristics": ["White canvas", "Restrained green", "Product-led shopping", "Task-oriented operations"],
+    "dos": ["Preserve the current storefront identity.", "Associate server errors with fields.", "Keep location changes available on mobile."],
+    "donts": ["Do not imply Phase 2 services exist.", "Do not replace the identity while fixing a component."]
+  }
+}

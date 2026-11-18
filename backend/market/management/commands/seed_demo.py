@@ -6,7 +6,7 @@ from django.contrib.auth.models import User
 from django.core.management.base import BaseCommand, CommandError
 from django.utils import timezone
 
-from market.models import DeliveryEvent, Hub, Listing, Order, OrderItem, ProduceRequest, Profile
+from market.models import Hub, Listing, ProduceRequest, Profile, StockMovement
 
 
 class Command(BaseCommand):
@@ -57,25 +57,21 @@ class Command(BaseCommand):
             ("Farm-fresh potatoes", "vegetables", "potatoes", "85", "kg", "hub", "farmer", "Karen, Nairobi"),
         ]
         for name, category, photo, price, unit, channel, farmer, location in products:
-            Listing.objects.get_or_create(name=name, farmer=users[farmer], defaults={
+            listing, created = Listing.objects.get_or_create(name=name, farmer=users[farmer], source__isnull=True, defaults={
                 "category": category, "price": price, "quantity": 100, "unit": unit,
                 "channel": channel, "hub": hub if channel == "hub" else None, "received": channel == "hub",
                 "location": location, "latitude": -1.16 if farmer == "farmer" else -1.24, "longitude": 36.65,
                 "harvest_date": timezone.localdate() - timedelta(days=1),
                 "description": "Locally grown and carefully selected. Demo produce for exploring SokoSoo.",
                 "image": f"https://images.unsplash.com/{photos[photo]}?auto=format&fit=crop&w=800&q=85",
+                "dispatched_quantity": 100 if channel == "hub" else 0,
+                "received_quantity": 100 if channel == "hub" else 0,
             })
+            if created:
+                StockMovement.objects.create(listing=listing, actor=users[farmer], kind="opening", change=100, balance=100, note="Local demo starting balance.")
         ProduceRequest.objects.get_or_create(consumer=users["consumer"], name="Tomatoes for our community kitchen", defaults={
             "quantity": 10, "unit": "kg", "budget": 1500, "location": "Kilimani, Nairobi",
+            "product_name": "tomatoes", "category": "vegetables",
             "notes": "Firm, ripe tomatoes. Delivery this week, please.", "deadline": timezone.localdate() + timedelta(days=7),
         })
-        if not Order.objects.filter(consumer=users["consumer"]).exists():
-            listing = Listing.objects.get(name="Vine-ripened tomatoes")
-            order = Order.objects.create(
-                consumer=users["consumer"], driver=users["driver"], address="Demo delivery: Kilimani, Nairobi",
-                total=Decimal("360"), status="processing", payment_status="demo",
-                expires_at=timezone.now(), payment_method="mpesa",
-            )
-            OrderItem.objects.create(order=order, listing=listing, quantity=3, price=listing.price)
-            DeliveryEvent.objects.create(order=order, status="processing")
         self.stdout.write(self.style.SUCCESS("Local demo ready. Accounts: consumer, farmer, farmer2, manager, driver. Password: SokoDemo2026!"))

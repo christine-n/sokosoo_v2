@@ -1,5 +1,5 @@
 from django.contrib import admin
-from .models import Bid, DeliveryEvent, Hub, Listing, LocationPing, Order, OrderItem, ProduceRequest, Profile, Review
+from .models import Bid, DeliveryEvent, Enquiry, EnquiryItem, Hub, Listing, LocationPing, Notification, Order, OrderItem, ProduceRequest, Profile, Review, StockMovement
 
 @admin.register(Order)
 class OrderAdmin(admin.ModelAdmin):
@@ -9,10 +9,10 @@ class OrderAdmin(admin.ModelAdmin):
 @admin.register(Listing)
 class ListingAdmin(admin.ModelAdmin):
     list_display = ["name", "farmer", "channel", "hub", "quantity", "reserved", "received"]
-    readonly_fields = ["quantity", "reserved", "received"]
+    readonly_fields = ["quantity", "reserved", "received", "source", "dispatched_quantity", "received_quantity", "state", "available_until"]
 
 admin.site.register([Profile, Hub, ProduceRequest, Bid])
-for model in [OrderItem, DeliveryEvent, LocationPing, Review]:
+for model in [OrderItem, DeliveryEvent, LocationPing, Review, Enquiry, EnquiryItem, StockMovement, Notification]:
     @admin.register(model)
     class ReadOnlyAdmin(admin.ModelAdmin):
         def has_add_permission(self, request):

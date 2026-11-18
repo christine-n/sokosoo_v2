@@ -7,7 +7,7 @@ from django.contrib.auth.models import User
 from django.contrib.auth.password_validation import validate_password
 from django.core.exceptions import ValidationError as DjangoValidationError
 from django.db import transaction
-from django.db.models import F, Q
+from django.db.models import Count, F, Q
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from django.utils.decorators import method_decorator
@@ -17,13 +17,15 @@ from rest_framework.authtoken.models import Token
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.exceptions import PermissionDenied, ValidationError
 from rest_framework.permissions import AllowAny
+from rest_framework.pagination import PageNumberPagination
 from rest_framework.response import Response
 from rest_framework.throttling import ScopedRateThrottle
 from rest_framework.views import APIView
 
-from .models import Bid, DeliveryEvent, Hub, Listing, LocationPing, Order, ProduceRequest, Profile, Review
+from .models import Bid, DeliveryEvent, Enquiry, Hub, Listing, LocationPing, Order, ProduceRequest, Profile, Review
 from .serializers import BidSerializer, HubSerializer, ListingSerializer, OrderSerializer, RequestSerializer, ReviewSerializer
 from .services import create_order, expire_reservations, release_order
+from .connections import notify, notify_hub_matches, record_stock, stock_is_active
 
 
 def account(user):
@@ -149,28 +151,87 @@ def km_distance(lat1, lon1, lat2, lon2):
     return 6371 * 2 * math.asin(min(1, math.sqrt(a)))
 
 
+def listing_response(request, listings):
+    if "page" not in request.query_params:
+        return Response(ListingSerializer(listings[:500], many=True, context={"request": request}).data)
+    return paginated_response(request, listings, ListingSerializer)
+
+
+def paginated_response(request, queryset, serializer):
+    paginator = PageNumberPagination()
+    paginator.page_size = 24
+    items = paginator.paginate_queryset(queryset, request)
+    page = paginator.page
+    return Response({
+        "items": serializer(items, many=True, context={"request": request}).data,
+        "count": page.paginator.count, "page": page.number, "pages": page.paginator.num_pages,
+        "next_page": page.next_page_number() if page.has_next() else None,
+        "previous_page": page.previous_page_number() if page.has_previous() else None,
+    })
+
+
+def public_listings():
+    return Listing.objects.select_related("farmer__profile", "hub").filter(
+        Q(channel="direct") | Q(received=True), quantity__gt=F("reserved"),
+        state="active", available_until__gt=timezone.now(),
+    )
+
+
+@api_view(["GET"])
+@permission_classes([AllowAny])
+def listing_detail(request, pk):
+    return Response(ListingSerializer(get_object_or_404(public_listings(), pk=pk), context={"request": request}).data)
+
+
 class ListingsView(APIView):
     permission_classes = [AllowAny]
 
     def get(self, request):
         expire_reservations()
-        queryset = Listing.objects.select_related("farmer__profile", "hub").filter(
-            Q(channel="direct") | Q(received=True), quantity__gt=F("reserved")
-        ).order_by("-created_at")
+        queryset = public_listings().order_by("-created_at", "-pk")
         params = request.query_params
         if params.get("mine") == "true":
             if not request.user.is_authenticated:
                 raise PermissionDenied("Sign in to view your inventory.")
-            queryset = Listing.objects.select_related("farmer__profile", "hub").filter(farmer=request.user).order_by("-created_at")
+            queryset = Listing.objects.select_related("farmer__profile", "hub").filter(farmer=request.user).order_by("-created_at", "-pk")
+        if "ids" in params:
+            ids = params["ids"].split(",") if params["ids"] else []
+            if any(not value.isdigit() or int(value) < 1 for value in ids):
+                raise ValidationError("Enter valid product IDs.")
+            queryset = queryset.filter(pk__in=[int(value) for value in ids])
         if params.get("q"):
-            queryset = queryset.filter(Q(name__icontains=params["q"]) | Q(location__icontains=params["q"]) | Q(farmer__profile__farm_name__icontains=params["q"]))
+            queryset = queryset.filter(Q(name__icontains=params["q"]) | Q(location__icontains=params["q"]) | Q(hub__name__icontains=params["q"]) | Q(hub__location__icontains=params["q"]) | Q(farmer__profile__farm_name__icontains=params["q"]))
         for field in ["category", "channel", "hub"]:
             if params.get(field):
                 if field == "hub" and not params[field].isdigit():
                     raise ValidationError("Select a valid hub.")
                 queryset = queryset.filter(**{field: params[field]})
-        listings = list(queryset[:500])
+        if params.get("stock_status"):
+            statuses = {
+                "active": Q(state="active", available_until__gt=timezone.now(), quantity__gt=F("reserved")) & (Q(channel="direct") | Q(received=True)),
+                "review": Q(state="archived") | Q(available_until__lte=timezone.now()),
+                "out_of_stock": Q(quantity__lte=F("reserved")),
+                "in_transit": Q(channel="hub", received=False),
+            }
+            if params["stock_status"] not in statuses:
+                raise ValidationError("Select a valid stock status.")
+            queryset = queryset.filter(statuses[params["stock_status"]])
+        if params.get("offer_request"):
+            pk = serializers.IntegerField(min_value=1).run_validation(params["offer_request"])
+            need = get_object_or_404(ProduceRequest, pk=pk)
+            queryset = queryset.filter(
+                unit=need.unit, quantity__gte=F("reserved") + need.quantity,
+                state="active", available_until__gt=timezone.now(),
+            ).filter(Q(channel="direct") | Q(received=True))
+        if params.get("max_price"):
+            maximum = serializers.DecimalField(max_digits=10, decimal_places=2, min_value=0).run_validation(params["max_price"])
+            queryset = queryset.filter(price__lte=maximum)
+        sort = params.get("sort")
+        if sort in ["price_asc", "price_desc"]:
+            queryset = queryset.order_by("-price" if sort == "price_desc" else "price", "-pk")
+        listings = queryset
         if params.get("lat") is not None and params.get("lng") is not None:
+            listings = list(queryset)
             latitude = parse_coordinate(params["lat"], 90)
             longitude = parse_coordinate(params["lng"], 180)
             for listing in listings:
@@ -181,30 +242,29 @@ class ListingsView(APIView):
                 if radius < 0:
                     raise ValidationError("Distance must be positive.")
                 listings = [item for item in listings if item.distance <= radius]
-        sort = params.get("sort")
-        if sort in ["price_asc", "price_desc"]:
-            listings.sort(key=lambda item: item.price, reverse=sort == "price_desc")
-        elif sort == "distance" and listings and hasattr(listings[0], "distance"):
-            listings.sort(key=lambda item: item.distance)
-        return Response(ListingSerializer(listings, many=True).data)
+            if sort == "distance":
+                listings.sort(key=lambda item: (item.distance, -item.pk))
+        return listing_response(request, listings)
 
     def post(self, request):
         if not request.user.is_authenticated:
             raise PermissionDenied("Sign in to add produce.")
         require_role(request.user, "farmer")
-        serializer = ListingSerializer(data=request.data)
+        serializer = ListingSerializer(data=request.data, context={"request": request})
         serializer.is_valid(raise_exception=True)
-        serializer.save(farmer=request.user, received=False)
+        with transaction.atomic():
+            listing = serializer.save(farmer=request.user, received=False)
+            record_stock(listing, request.user, "opening", listing.quantity, "Initial farmer-confirmed stock.")
         return Response(serializer.data, status=201)
 
 
 @api_view(["GET"])
 def hub_drops(request):
     require_role(request.user, "manager")
-    queryset = Listing.objects.filter(channel="hub").select_related("farmer__profile", "hub")
+    queryset = Listing.objects.filter(channel="hub").select_related("farmer__profile", "hub").order_by("-created_at", "-pk")
     if not request.user.is_staff:
         queryset = queryset.filter(hub__manager=request.user)
-    return Response(ListingSerializer(queryset, many=True).data)
+    return listing_response(request, queryset)
 
 
 @api_view(["POST"])
@@ -225,19 +285,60 @@ class RequestsView(APIView):
     permission_classes = [AllowAny]
 
     def get(self, request):
-        queryset = ProduceRequest.objects.select_related("consumer").prefetch_related("bids__farmer__profile", "bids__listing").order_by("-created_at")
+        queryset = ProduceRequest.objects.select_related("consumer").prefetch_related("bids__farmer__profile", "bids__listing").order_by("-created_at", "-pk")
+        params = request.query_params
+        if params.get("mine") == "true":
+            if not request.user.is_authenticated:
+                raise PermissionDenied("Sign in to view your requests.")
+            queryset = queryset.filter(consumer=request.user)
         query = request.query_params.get("q", "").strip()
         if query:
             queryset = queryset.filter(Q(name__icontains=query) | Q(notes__icontains=query) | Q(location__icontains=query))
+        if params.get("id"):
+            pk = serializers.IntegerField(min_value=1).run_validation(params["id"])
+            queryset = queryset.filter(pk=pk)
+        if params.get("category"):
+            queryset = queryset.filter(category=params["category"])
+        if params.get("status"):
+            if params["status"] == "open":
+                queryset = queryset.filter(status="open", deadline__gte=timezone.localdate())
+            elif params["status"] == "expired":
+                queryset = queryset.filter(status="open", deadline__lt=timezone.localdate())
+            elif params["status"] == "closed":
+                queryset = queryset.exclude(status="open")
+            else:
+                raise ValidationError("Select a valid request status.")
+        if params.get("offers") == "mine":
+            if not request.user.is_authenticated:
+                raise PermissionDenied("Sign in to view your offers.")
+            queryset = queryset.filter(bids__farmer=request.user)
+        if params.get("has_offers") == "true":
+            queryset = queryset.filter(bids__isnull=False).distinct()
+        if "page" in params:
+            return paginated_response(request, queryset, RequestSerializer)
         return Response(RequestSerializer(queryset[:100], many=True, context={"request": request}).data)
 
     def post(self, request):
         if not request.user.is_authenticated:
             raise PermissionDenied("Sign in to post a request.")
-        serializer = RequestSerializer(data=request.data)
+        serializer = RequestSerializer(data=request.data, context={"request": request})
         serializer.is_valid(raise_exception=True)
         serializer.save(consumer=request.user)
+        notify_hub_matches()
         return Response(serializer.data, status=201)
+
+
+@api_view(["GET"])
+def farmer_workspace(request):
+        require_role(request.user, "farmer")
+        stock = Listing.objects.filter(farmer=request.user).aggregate(
+            hidden=Count("pk", filter=Q(state="archived") | Q(available_until__lte=timezone.now())),
+            awaiting_receipt=Count("pk", filter=Q(channel="hub", received=False)),
+        )
+        return Response({
+            **stock,
+            "pending_enquiries": Enquiry.objects.filter(farmer=request.user, status="pending", expires_at__gt=timezone.now()).count(),
+        })
 
 
 @api_view(["POST"])
@@ -254,12 +355,27 @@ def submit_bid(request, pk):
             raise ValidationError("You cannot bid on your own request.")
         if listing.farmer_id != request.user.pk or listing.unit != need.unit:
             raise ValidationError("Choose your own listing with the requested unit.")
-        if listing.quantity - listing.reserved < need.quantity or (listing.channel == "hub" and not listing.received):
+        if not stock_is_active(listing) or listing.quantity - listing.reserved < need.quantity:
             raise ValidationError("Your listing does not have enough available stock.")
         if Bid.objects.filter(request=need, farmer=request.user).exists():
             raise ValidationError("You have already submitted a bid.")
         serializer.save(request=need, farmer=request.user)
+        notify(need.consumer_id, f"offer:{serializer.instance.pk}", f"A farmer sent an offer for {need.name}.", f"/?view=requests&request={need.pk}",
+               title="New farmer offer", kind="general", listing=listing, context=need.name)
     return Response(serializer.data, status=201)
+
+
+@api_view(["GET"])
+def consumer_workspace(request):
+    require_role(request.user, "consumer")
+    enquiries = Enquiry.objects.filter(consumer=request.user)
+    return Response({
+        "pending_enquiries": enquiries.filter(status="pending", expires_at__gt=timezone.now()).count(),
+        "accepted_enquiries": enquiries.filter(status="accepted").count(),
+        "requests_with_offers": ProduceRequest.objects.filter(
+            consumer=request.user, status="open", deadline__gte=timezone.localdate(), bids__isnull=False,
+        ).distinct().count(),
+    })
 
 
 class CheckoutSerializer(serializers.Serializer):

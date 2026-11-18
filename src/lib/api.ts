@@ -6,12 +6,19 @@ export type Listing = {
   unit: string; channel: "direct" | "hub"; hub: number | null; hub_name: string | null;
   location: string; latitude: number; longitude: number; harvest_date: string;
   image: string; received: boolean; distance?: number;
+  state: "active" | "archived"; available_until: string; source: number | null;
+  dispatched_quantity: string; received_quantity: string;
+  movements: { id: number; kind: string; change: string; balance: string; note: string; created_at: string }[];
 };
-export type Bid = { id: number; farmer_name: string; farm_name: string; listing: number; listing_name: string; price: string; message: string };
+export type Bid = { id: number; farmer_name: string; farm_name: string; listing: number; listing_name: string; price: string; message: string; is_mine: boolean };
+export type DataPage<T> = { items: T[]; count: number; page: number; pages: number; next_page: number | null; previous_page: number | null };
+export type ListingPage = DataPage<Listing>;
 export type ProduceRequest = {
   id: number; consumer_name: string; name: string; quantity: string; unit: string;
   budget: string; location: string; notes: string; deadline: string; status: string;
   bids: Bid[]; is_owner: boolean;
+  product_name: string; category: string; hub: number | null;
+  hub_matches: { id: number; name: string; hub_id: number }[];
 };
 export type Order = {
   id: string; address: string; total: string; payment_method: string; payment_status: string;
@@ -21,7 +28,22 @@ export type Order = {
   location: { latitude: number; longitude: number; accuracy: number; recorded_at: string } | null;
   review?: { produce_rating: number; delivery_rating: number; comment: string };
 };
-export type CartItem = { listing: Listing; quantity: number };
+export type CartItem = { listing: Listing; quantity: number; expiresAt: number };
+export type Enquiry = {
+  id: string; consumer: number; farmer: number; consumer_name: string; farmer_name: string; farm_name: string;
+  message: string; contact: string; status: "pending" | "accepted" | "declined" | "cancelled" | "expired";
+  response: string; pickup_details: string; expires_at: string; created_at: string; responded_at: string | null;
+  items: { id: number; listing_id: number; name: string; unit: string; quantity: string; price: string; location: string }[];
+};
+export type InboxSummary = { unread: number; latest_id: number };
+export type InboxData = InboxSummary & {
+  snapshot: number; count: number; next_cursor: string | null; previous_cursor: string | null;
+  items: {
+    id: number; title: string; kind: "enquiry" | "stock" | "hub" | "bag" | "general"; context: string;
+    message: string; link: string; read_at: string | null; created_at: string;
+  }[];
+};
+export type SavedCartLine = { listing_id: number; quantity: string; expires_at: string };
 
 function errorText(value: unknown): string {
   if (typeof value === "string") return value;

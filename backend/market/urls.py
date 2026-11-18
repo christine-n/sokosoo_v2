@@ -1,5 +1,6 @@
 from django.urls import path
 from . import views
+from . import connection_views as connections
 
 urlpatterns = [
     path("session/", views.SessionView.as_view()),
@@ -8,17 +9,27 @@ urlpatterns = [
     path("logout/", views.logout_view),
     path("driver-token/", views.DriverTokenView.as_view()),
     path("listings/", views.ListingsView.as_view()),
+    path("farmer-workspace/", views.farmer_workspace),
+    path("consumer-workspace/", views.consumer_workspace),
+    path("listings/<int:pk>/", views.listing_detail),
     path("hubs/", views.hubs),
     path("hub-drops/", views.hub_drops),
-    path("hub-drops/<int:pk>/receive/", views.receive_drop),
+    path("hub-drops/<int:pk>/receive/", connections.hub_receive),
+    path("listings/<int:pk>/stock/", connections.inventory_update),
+    path("listings/<int:pk>/dispatch/", connections.hub_dispatch),
+    path("enquiries/", connections.EnquiriesView.as_view()),
+    path("enquiries/<uuid:pk>/reply/", connections.enquiry_reply),
+    path("enquiries/<uuid:pk>/cancel/", connections.enquiry_cancel),
+    path("notifications/", connections.NotificationsView.as_view()),
+    path("cart/", connections.CartView.as_view()),
     path("requests/", views.RequestsView.as_view()),
     path("requests/<int:pk>/bids/", views.submit_bid),
-    path("bids/<int:pk>/accept/", views.accept_bid),
-    path("checkout/", views.checkout),
+    path("bids/<int:pk>/accept/", connections.accept_offer),
+    path("checkout/", connections.retired_checkout),
     path("orders/", views.orders),
-    path("orders/<uuid:pk>/cancel/", views.cancel_order),
-    path("orders/<uuid:pk>/payment/", views.initiate_payment),
-    path("orders/<uuid:pk>/review/", views.review_order),
-    path("orders/<uuid:pk>/transition/", views.transition_delivery),
-    path("orders/<uuid:pk>/tracking/", views.tracking),
+    path("orders/<uuid:pk>/cancel/", connections.retired_checkout),
+    path("orders/<uuid:pk>/payment/", connections.retired_checkout),
+    path("orders/<uuid:pk>/review/", connections.retired_checkout),
+    path("orders/<uuid:pk>/transition/", connections.retired_checkout),
+    path("orders/<uuid:pk>/tracking/", connections.retired_checkout),
 ]

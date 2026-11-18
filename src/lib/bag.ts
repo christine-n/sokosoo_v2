@@ -1,6 +1,24 @@
-import type { CartItem, Listing } from "./api";
+import { api, type CartItem, type Listing } from "./api.ts";
 
-export function restoreBag(serialized: string | null, catalog: Listing[]) {
+export const bagLifetime = 24 * 60 * 60 * 1000;
+
+export async function resolveBag(serialized: string | null) {
+  const entries: unknown = serialized === null ? [] : JSON.parse(serialized);
+  if (!Array.isArray(entries)) throw new Error("The saved bag is not a list.");
+  const ids = entries.map((entry: unknown) => {
+    if (!entry || typeof entry !== "object" || !("listingId" in entry) || !Number.isSafeInteger(entry.listingId) || Number(entry.listingId) < 1) {
+      throw new Error("The saved bag contains an invalid product.");
+    }
+    return Number(entry.listingId);
+  });
+  const listings: Listing[] = [];
+  for (let offset = 0; offset < ids.length; offset += 100) {
+    listings.push(...await api<Listing[]>(`listings/?ids=${ids.slice(offset, offset + 100).join(",")}`));
+  }
+  return restoreBag(serialized, listings);
+}
+
+export function restoreBag(serialized: string | null, catalog: Listing[], now = Date.now()) {
   if (serialized === null) return { items: [] as CartItem[], adjusted: false };
   const entries: unknown = JSON.parse(serialized);
   if (!Array.isArray(entries)) throw new Error("The saved bag is not a list.");
@@ -17,10 +35,14 @@ export function restoreBag(serialized: string | null, catalog: Listing[]) {
     seen.add(entry.listingId);
     const listing = catalog.find((item) => item.id === entry.listingId);
     if (!listing || Number(listing.available) <= 0) { adjusted = true; continue; }
-    const quantity = Math.min(Math.round(entry.quantity * 100) / 100, Number(listing.available));
+    const savedExpiry = "expiresAt" in entry && typeof entry.expiresAt === "number" && Number.isFinite(entry.expiresAt)
+      ? Math.min(entry.expiresAt, now + bagLifetime) : now + bagLifetime;
+    const expiresAt = Math.min(savedExpiry, new Date(listing.available_until).getTime());
+    if (expiresAt <= now) { adjusted = true; continue; }
+    const quantity = Math.round(entry.quantity * 100) / 100;
     if (quantity <= 0) { adjusted = true; continue; }
     if (quantity !== entry.quantity) adjusted = true;
-    items.push({ listing, quantity });
+    items.push({ listing, quantity, expiresAt });
   }
   return { items, adjusted };
 }

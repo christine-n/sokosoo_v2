@@ -2,6 +2,41 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { ApiError, api } from "./api.ts";
 import { responsiveImage } from "./images.ts";
+import { changedQuantity, quantityStep, validQuantity } from "./quantity.ts";
+import { consumerDestination, consumerUrl, farmerDestination, farmerUrl } from "./workspace.ts";
+
+test("farmer notification destinations retain workspace context and enquiry deep links", () => {
+  assert.equal(farmerDestination("/?view=enquiries&enquiry=abc"), "/?view=farm&section=enquiries&enquiry=abc");
+  assert.equal(farmerDestination("/?view=farm"), farmerUrl("stock"));
+  assert.equal(farmerDestination(farmerUrl("transfers", { batch: "12" })), farmerUrl("transfers", { batch: "12" }));
+  assert.equal(farmerDestination("/?view=requests"), farmerUrl("requests"));
+  assert.equal(farmerDestination("/?view=cart"), "/?view=cart");
+  assert.equal(farmerDestination("https://example.com/?view=enquiries"), "https://example.com/?view=enquiries");
+  assert.equal(farmerUrl("stock", { q: "", page: "2" }), "/?view=farm&section=stock&page=2");
+});
+
+test("consumer deep links retain their records without redirecting shopping into the workspace", () => {
+  assert.equal(consumerDestination("/?view=enquiries&enquiry=abc"), consumerUrl("enquiries", { enquiry: "abc" }));
+  assert.equal(consumerDestination("/?view=requests&request=24"), consumerUrl("requests", { request: "24" }));
+  assert.equal(consumerDestination(consumerUrl("requests", { request: "24", offer: "3" })), consumerUrl("requests", { request: "24", offer: "3" }));
+  assert.equal(consumerDestination("/?view=notifications"), consumerUrl("notifications"));
+  assert.equal(consumerDestination("/?view=orders&enquiry=abc"), consumerUrl("enquiries", { enquiry: "abc" }));
+  assert.equal(consumerDestination("/?view=cart"), "/?view=cart");
+  assert.equal(consumerDestination("/?view=product&id=12"), "/?view=product&id=12");
+  assert.equal(consumerDestination("https://example.com/?view=requests"), "https://example.com/?view=requests");
+});
+
+test("whole-animal controls reject fractions without changing divisible units", () => {
+  assert.equal(quantityStep("head"), 1);
+  assert.equal(quantityStep("kg"), 0.01);
+  assert.equal(validQuantity("head", 0.5), false);
+  assert.equal(validQuantity("head", 1), true);
+  assert.equal(validQuantity("kg", 0.5), true);
+  assert.equal(changedQuantity("head", 0.5, 1, 10), 1);
+  assert.equal(changedQuantity("head", 1.5, -1, 10), 1);
+  assert.equal(changedQuantity("head", 2, 1, 2.5), 2);
+  assert.equal(changedQuantity("kg", 0.2, 0.1, 1), 0.3);
+});
 
 test("API validation retains individual fields without treating general errors as fields", () => {
   const error = new ApiError(400, { username: ["Already used."], quantity: ["Too much."], detail: "Check your details.", non_field_errors: ["Invalid combination."] });

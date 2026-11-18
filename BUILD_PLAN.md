@@ -2,11 +2,17 @@
 
 ## Implementation status
 
+### Current Phase 1 scope (supersedes payment/fulfilment MVP descriptions below)
+
+The approved first release connects farmers and buyers: private 24-hour carts, stock-checked enquiries with immediate quantity deductions, farmer responses, manual stock reconciliation, hub dispatch/partial receipt/movement history, selected-hub request matches, in-app notifications and scheduled archival cleanup. Declines and expiry never automatically restore deducted availability. Farmer acceptance shares contact and location but does not manage pickup or deduct twice. Product cards do not show internal freshness timestamps/deadlines.
+
+Payments, managed logistics, premium tracking, farmer classification and revenue pricing are explicitly Phase 2. Historical orders and the native driver foundation are preserved; their presence does not make these current Phase 1 services. The remaining architecture sections are a future roadmap, not the current release contract. See README.md for runnable behavior and limits.
+
 The initial local implementation now includes a Next.js marketplace, Django API and Expo native driver foundation. This document remains the target architecture, not a claim that every phase is complete. See [README.md](./README.md) for setup, verified behavior, local database/polling deviations, and outstanding payment, inventory-ledger and production requirements. The native driver path supersedes the earlier foreground-web pilot recommendation.
 
 ## 1. Scope and recommendations
 
-Confirmed: Next.js + Django, Kenya, KES, platform-managed drivers, live GPS tracking. This deliverable is a plan, not an implemented application.
+Confirmed current foundations: Next.js + Django, Kenya and KES. The architecture below explores future managed payments/delivery and live GPS tracking; those are not current Phase 1 commitments.
 
 Build a modular monolith first: one Django application owns business rules and one Next.js application serves role-specific experiences. Avoid microservices until operational scale justifies them.
 
